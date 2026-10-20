@@ -1,0 +1,2292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Portfolio — Animador 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --bg:#241608;
+    --bg-elev:#3A2812;
+    --bg-elev-2:#4A331A;
+    --text:#F5E6C8;
+    --text-dim:#C9A876;
+    --line:rgba(245,230,200,0.16);
+    --accent:#F4B942;
+    --accent-2:#8FBF4D;
+    --radius:2px;
+    --card-bg:#3A2812;
+    --card-bg-image:none;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body::before{
+    content:"";
+    position:fixed; inset:0; z-index:9999; pointer-events:none;
+    opacity:0.06; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  body::after{
+    content:"";
+    position:fixed; inset:0; z-index:9998; pointer-events:none;
+    background-image:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.16) 0px,
+      rgba(0,0,0,0.16) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    mix-blend-mode:multiply;
+    opacity:0.5;
+  }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter', system-ui, sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4{
+    font-family:'Fredoka', sans-serif;
+    font-weight:600;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  .mono{
+    font-family:'Press Start 2P', monospace;
+    font-size:9.5px;
+    color:var(--text-dim);
+    letter-spacing:0.03em;
+    line-height:1.7;
+  }
+  .section-note{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    letter-spacing:0.01em;
+    line-height:1.5;
+  }
+  a{color:inherit;}
+  ::selection{background:var(--accent);color:#0A0A0A;}
+
+  [contenteditable="true"]{
+    outline:1px dashed transparent;
+    border-radius:1px;
+    transition:outline-color .15s ease, background .15s ease;
+  }
+  body.visitor .toolbar, body.visitor .tbx-panel, body.visitor #tbx-panel{ display:none !important; }
+  body:not(.edit-mode) .edit-only-btn{ display:none !important; }
+  body.edit-mode [contenteditable="true"]{
+    outline:1px dashed var(--line);
+    cursor:text;
+  }
+  body.edit-mode [contenteditable="true"]:hover{
+    outline-color:var(--accent);
+    background:rgba(124,92,255,0.06);
+  }
+  body.edit-mode [contenteditable="true"]:focus{
+    outline:1px solid var(--accent);
+    background:rgba(124,92,255,0.08);
+  }
+  [contenteditable="true"]:empty:before{
+    content:attr(data-placeholder);
+    color:var(--text-dim);
+  }
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px clamp(20px,4vw,48px);
+    background:linear-gradient(to bottom, rgba(18,20,26,0.92), rgba(18,20,26,0));
+    backdrop-filter:blur(6px);
+  }
+  .nav-mark{font-family:'Fredoka';font-weight:700;font-size:15px;letter-spacing:0.01em;}
+  .nav-mark span{color:var(--accent);}
+  .nav-links{display:flex; gap:28px; list-style:none; margin:0; padding:0;}
+  .nav-links a{
+    font-size:13px; text-decoration:none; color:var(--text-dim);
+    font-family:'IBM Plex Mono'; letter-spacing:0.02em;
+    transition:color .15s ease;
+  }
+  .nav-links a:hover{color:var(--text);}
+  @media (max-width:680px){ .nav-links{display:none;} }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative; z-index:1;
+    min-height:100svh;
+    display:flex; flex-direction:column; justify-content:flex-end;
+    overflow:hidden;
+    border-bottom:1px solid var(--line);
+  }
+  #viewport-canvas{
+    position:absolute; inset:0; width:100%; height:100%; display:block;
+    cursor:grab; z-index:2;
+  }
+  #viewport-canvas:active{cursor:grabbing;}
+  .hero-bg-image{
+    position:absolute; inset:0; z-index:0;
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+  }
+  #particle-canvas{
+    position:fixed; inset:0; z-index:0; width:100vw; height:100vh;
+    display:block; pointer-events:none;
+  }
+  .hero-scrim{
+    position:absolute; inset:0; z-index:3;
+    background:
+      linear-gradient(to top, var(--bg) 0%, rgba(18,20,26,0.15) 45%, rgba(18,20,26,0.55) 100%),
+      linear-gradient(rgba(10,10,10,0.15), rgba(10,10,10,0.15));
+    pointer-events:none;
+  }
+  .hud{ position:absolute; z-index:4; pointer-events:none; }
+  .hud-tl{top:88px; left:clamp(20px,4vw,48px);}
+  .hud-tr{top:88px; right:clamp(20px,4vw,48px); text-align:right;}
+  .hud-tl div, .hud-tr div{margin-bottom:4px;}
+  .hud-tr span{color:var(--accent-2);}
+  .hero-body{
+    position:relative; z-index:4;
+    padding:0 clamp(20px,4vw,48px) 56px;
+    display:flex; flex-direction:column; gap:18px;
+  }
+  .role-tag{ font-family:'IBM Plex Mono'; font-size:12px; color:var(--accent-2); letter-spacing:0.03em; }
+  .hero-name{ font-size:clamp(42px,9vw,108px); line-height:0.95; max-width:16ch; }
+  .hero-tagline{ font-size:clamp(15px,1.8vw,19px); color:var(--text-dim); max-width:52ch; }
+  .hero-actions{display:flex; gap:14px; margin-top:6px; flex-wrap:wrap;}
+  .btn{
+    font-family:'IBM Plex Mono'; font-size:12.5px;
+    padding:11px 20px; border-radius:0;
+    border:2px solid var(--line); background:var(--bg-elev); color:var(--text);
+    cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:8px;
+    transition:transform .1s ease, box-shadow .1s ease, border-color .15s ease;
+    clip-path:polygon(0 4px,4px 4px,4px 0,calc(100% - 4px) 0,calc(100% - 4px) 4px,100% 4px,100% calc(100% - 4px),calc(100% - 4px) calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,4px calc(100% - 4px),0 calc(100% - 4px));
+    box-shadow:3px 3px 0 rgba(0,0,0,0.45);
+  }
+  .btn:hover{border-color:var(--accent); transform:translate(1px,1px); box-shadow:2px 2px 0 rgba(0,0,0,0.45);}
+  .btn-solid{background:var(--accent); border-color:#00000030; color:#241608; font-weight:600;}
+  .btn-solid:hover{opacity:0.92;}
+  .btn-sm{padding:8px 14px; font-size:11.5px;}
+  .btn input[type=file]{display:none;}
+
+  /* ---------- SECTIONS ---------- */
+  section{padding:96px clamp(20px,4vw,48px); position:relative; z-index:1;}
+  .section-head{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    gap:24px; margin-bottom:44px; flex-wrap:wrap;
+    border-bottom:1px solid var(--line); padding-bottom:18px;
+  }
+  .section-num{font-family:'Press Start 2P'; font-size:10px; color:var(--text-dim); line-height:1.6;}
+  .section-title{font-size:clamp(26px,3.4vw,38px);}
+
+  /* ---------- REEL / GALLERY ---------- */
+  .reel-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:2px; background:var(--line); }
+  .reel-item{ position:relative; aspect-ratio:4/3; background:var(--bg-elev); overflow:hidden; }
+  .reel-item img{width:100%; height:100%; object-fit:cover; display:block;}
+  .reel-cap{
+    position:absolute; left:0; right:0; bottom:0; padding:10px 12px;
+    background:linear-gradient(to top, rgba(10,10,10,0.85), transparent);
+    font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--text);
+  }
+  .reel-remove{
+    position:absolute; top:8px; right:8px; z-index:3;
+    width:24px; height:24px; border-radius:50%;
+    background:rgba(10,10,10,0.7); border:1px solid var(--line); color:var(--text);
+    font-size:14px; line-height:1; cursor:pointer; display:none;
+    align-items:center; justify-content:center;
+  }
+  body.edit-mode .reel-remove{display:flex;}
+  .reel-add{
+    display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; cursor:pointer;
+    color:var(--text-dim); font-family:'IBM Plex Mono'; font-size:12px; border:1px dashed var(--line);
+  }
+  .reel-add:hover{color:var(--accent); border-color:var(--accent);}
+  .reel-add input{display:none;}
+  .reel-add .plus{font-size:26px; font-family:'Fredoka';}
+
+  /* ---------- PERSONAJES ---------- */
+  .chars-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(270px,1fr)); gap:16px; }
+  .char-card{
+    border:2px solid var(--line);
+    background:var(--card-bg) var(--card-bg-image) center/cover no-repeat;
+    display:flex; flex-direction:column;
+    box-shadow:4px 4px 0 rgba(0,0,0,0.35);
+  }
+  .char-thumb{
+    aspect-ratio:16/10; background:var(--bg-elev-2); position:relative; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    border-bottom:1px solid var(--line);
+  }
+  .char-thumb img{width:100%; height:100%; object-fit:cover;}
+  .char-thumb .initial{
+    font-family:'Fredoka'; font-weight:700; font-size:44px; color:var(--text-dim); opacity:0.5;
+  }
+  .char-thumb .thumb-upload{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(10,10,10,0.55); cursor:pointer; font-family:'IBM Plex Mono'; font-size:11px; color:var(--text);
+    opacity:0; transition:opacity .15s ease;
+  }
+  body.edit-mode .char-thumb .thumb-upload{display:flex;}
+  .char-thumb:hover .thumb-upload{opacity:1;}
+  .char-thumb .thumb-upload input{display:none;}
+  .char-badge{
+    position:absolute; top:8px; left:8px; font-family:'IBM Plex Mono'; font-size:10.5px;
+    padding:3px 8px; background:rgba(10,10,10,0.6); border:1px solid var(--line); color:var(--accent-2);
+  }
+  .char-body{ padding:16px; display:flex; flex-direction:column; gap:10px; flex:1; }
+  .char-role{ font-family:'IBM Plex Mono'; font-size:11px; color:var(--accent-2); }
+  .char-name{ font-size:18px; }
+  .char-specs{ display:flex; flex-direction:column; gap:5px; margin-top:2px; }
+  .char-spec-row{ display:flex; justify-content:space-between; gap:10px; font-family:'IBM Plex Mono'; font-size:11px; }
+  .char-spec-row .k{color:var(--text-dim);}
+  .char-notes{ font-size:12.5px; color:var(--text-dim); }
+  .char-actions{ display:flex; gap:8px; margin-top:auto; padding-top:8px; flex-wrap:wrap; }
+  .char-remove-row{ display:none; justify-content:flex-end; padding:0 16px 12px; }
+  body.edit-mode .char-remove-row{display:flex;}
+  .char-tex-section{
+    display:none; flex-direction:column; gap:6px; padding:12px 16px; border-top:1px solid var(--line);
+    background:rgba(255,255,255,0.02);
+  }
+  body.edit-mode .char-tex-section{ display:flex; }
+  .char-tex-heading{ font-size:10px; letter-spacing:0.04em; color:var(--text-dim); margin-bottom:2px; }
+  .char-tex-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .char-tex-label{ font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .char-tex-bulk{ padding-bottom:8px; margin-bottom:2px; border-bottom:1px dashed var(--line); }
+  .char-remove{
+    font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--text-dim); background:none; border:none; cursor:pointer;
+  }
+  .char-remove:hover{color:#ff6b6b;}
+
+  .add-char-card{
+    border:1px dashed var(--line); display:flex; align-items:center; justify-content:center;
+    min-height:220px; cursor:pointer; color:var(--text-dim); font-family:'IBM Plex Mono'; font-size:12px;
+    flex-direction:column; gap:8px;
+  }
+  .add-char-card:hover{color:var(--accent); border-color:var(--accent);}
+
+  /* ---------- ABOUT ---------- */
+  .about-wrap{display:grid; grid-template-columns:1.1fr 0.9fr; gap:56px;}
+  @media (max-width:800px){ .about-wrap{grid-template-columns:1fr;} }
+  .about-bio{font-size:16px; color:var(--text-dim); max-width:62ch;}
+  .skills-list{display:flex; flex-wrap:wrap; gap:8px; margin-top:20px;}
+  .skill-chip{ font-family:'IBM Plex Mono'; font-size:11.5px; padding:7px 12px; border:1px solid var(--line); position:relative; }
+  .skill-chip .rm{ display:none; margin-left:8px; cursor:pointer; color:var(--text-dim); }
+  body.edit-mode .skill-chip .rm{display:inline;}
+  .add-skill{
+    font-family:'IBM Plex Mono'; font-size:11.5px; padding:7px 12px; border:1px dashed var(--line);
+    background:none; color:var(--text-dim); cursor:pointer; display:none;
+  }
+  body.edit-mode .add-skill{display:inline-block;}
+  .specs{display:flex; flex-direction:column; gap:14px; border-left:1px solid var(--line); padding-left:24px;}
+  .spec-row{display:flex; justify-content:space-between; gap:16px; font-family:'IBM Plex Mono'; font-size:12.5px;}
+  .spec-row .k{color:var(--text-dim);}
+
+  /* ---------- CONTACT ---------- */
+  .contact-wrap{ display:flex; justify-content:space-between; align-items:flex-end; gap:40px; flex-wrap:wrap; }
+  .contact-email{font-size:clamp(24px,4vw,44px); font-family:'Fredoka'; font-weight:600;}
+  .socials{display:flex; gap:18px; flex-wrap:wrap;}
+  .socials a{font-family:'IBM Plex Mono'; font-size:13px; text-decoration:none; color:var(--text-dim); border-bottom:1px solid transparent;}
+  .socials a:hover{color:var(--text); border-color:var(--accent);}
+  footer{
+    padding:24px clamp(20px,4vw,48px); border-top:1px solid var(--line); font-family:'IBM Plex Mono'; font-size:11px;
+    color:var(--text-dim); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;
+    position:relative; z-index:1;
+  }
+
+  /* ---------- TOOLBAR ---------- */
+  .toolbar{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:100;
+    display:flex; align-items:center; gap:10px; background:var(--bg-elev-2); border:1px solid var(--line);
+    padding:8px 10px; border-radius:6px; box-shadow:0 12px 30px rgba(0,0,0,0.4);
+  }
+  .tb-btn{
+    font-family:'IBM Plex Mono'; font-size:11.5px; padding:8px 14px; background:none;
+    border:1px solid var(--line); color:var(--text-dim); border-radius:4px; cursor:pointer;
+  }
+  .tb-btn:hover{color:var(--text); border-color:var(--accent);}
+  .tb-btn.active{background:var(--accent); color:#0A0A0A; border-color:var(--accent); font-weight:500;}
+  .tb-color{ width:30px; height:30px; border-radius:50%; border:1px solid var(--line); background:none; cursor:pointer; padding:0; overflow:hidden; }
+  .tb-color input{width:200%; height:200%; margin:-25%; border:none; cursor:pointer;}
+  .tb-sep{width:1px; height:22px; background:var(--line);}
+  .save-note{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--text-dim); opacity:0.4;}
+
+  /* ---------- SPRITES DECORATIVOS ---------- */
+  #sprite-layer{ position:static; }
+  .bg-sprite{
+    position:absolute; font-size:clamp(22px,3vw,32px); line-height:1;
+    opacity:0.38; filter:drop-shadow(2px 2px 0 rgba(0,0,0,0.45));
+    cursor:pointer; user-select:none; pointer-events:auto;
+    transition:transform .25s cubic-bezier(.34,1.56,.64,1), opacity .2s ease, filter .2s ease;
+    animation:sprite-float 4.5s ease-in-out infinite;
+    z-index:1;
+  }
+  .bg-sprite:hover{
+    opacity:1;
+    transform:scale(1.4) rotate(-10deg) translateY(-8px);
+    filter:drop-shadow(3px 3px 0 rgba(0,0,0,0.5)) saturate(1.3);
+  }
+  body.edit-mode .bg-sprite{ outline:1px dashed transparent; }
+  body.edit-mode .bg-sprite:hover{ outline-color:var(--accent-2); }
+  .bg-sprite-image img{
+    width:38px; height:38px; object-fit:contain; display:block; pointer-events:none;
+  }
+  .sprite-delete{
+    position:absolute; top:-9px; right:-9px; width:18px; height:18px; border-radius:50%;
+    background:#e0554f; color:#fff; font-size:11px; line-height:1; display:none;
+    align-items:center; justify-content:center; z-index:2; font-family:'IBM Plex Mono';
+  }
+  body.edit-mode .bg-sprite:hover .sprite-delete{ display:flex; }
+  @keyframes sprite-float{
+    0%,100%{ transform:translateY(0) rotate(0deg); }
+    50%{ transform:translateY(-9px) rotate(4deg); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .bg-sprite{ animation:none; }
+  }
+  @media (max-width:640px){
+    .bg-sprite{ display:none; }
+  }
+
+  /* ---------- CUADROS DE TEXTO PERSONALIZABLES ---------- */
+  .textbox{
+    position:relative; display:inline-block; max-width:100%; vertical-align:top;
+  }
+  .tb-handle{
+    position:absolute; width:22px; height:22px; display:none; align-items:center; justify-content:center;
+    background:var(--accent); color:#0A0A0A; font-size:12px; border-radius:4px; z-index:6; user-select:none;
+    box-shadow:0 2px 8px rgba(0,0,0,0.4);
+  }
+  body.edit-mode .textbox:hover .tb-handle,
+  body.edit-mode .textbox.tb-active .tb-handle{ display:flex; }
+  .tb-move-handle{ top:-11px; left:-11px; cursor:move; touch-action:none; }
+  .tb-resize-handle{ bottom:-11px; right:-11px; cursor:nwse-resize; touch-action:none; }
+  .tb-delete-handle{ top:-11px; right:-11px; background:#e0554f; color:#fff; cursor:pointer; }
+  body.edit-mode .textbox.tb-active{ outline:1px dashed var(--accent-2); outline-offset:4px; }
+
+  #freeform-layer{ position:static; }
+  .custom-textbox{ pointer-events:auto; z-index:30; }
+  .custom-text-inner{
+    color:var(--text); font-size:18px; padding:4px 8px; min-width:60px; min-height:1.4em;
+    white-space:pre-wrap; line-height:1.35;
+  }
+
+  .tbx-panel{
+    position:fixed; bottom:78px; left:50%; transform:translateX(-50%); z-index:101;
+    display:flex; align-items:center; gap:8px; background:var(--bg-elev-2); border:1px solid var(--line);
+    padding:8px 10px; border-radius:6px; box-shadow:0 12px 30px rgba(0,0,0,0.4);
+  }
+  .tbx-panel[hidden]{ display:none; }
+  .tbx-label{ padding-right:4px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---------- MODAL: VISOR DE PERSONAJE ---------- */
+  .char-modal{
+    position:fixed; inset:0; z-index:200; background:rgba(8,9,12,0.86); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center; padding:clamp(12px,4vw,40px);
+  }
+  .char-modal[hidden]{display:none;}
+  .char-modal-inner{
+    width:100%; max-width:980px; max-height:88vh; background:var(--bg-elev); border:1px solid var(--line);
+    display:grid; grid-template-columns:1.3fr 1fr; overflow:hidden; position:relative;
+  }
+  @media (max-width:760px){ .char-modal-inner{grid-template-columns:1fr; max-height:92vh; overflow-y:auto;} }
+  .modal-viewer{ position:relative; background:#0E0F13; min-height:340px; }
+  #modal-canvas{width:100%; height:100%; display:block; cursor:grab;}
+  #modal-canvas:active{cursor:grabbing;}
+  .modal-hud{ position:absolute; top:14px; left:14px; pointer-events:none; }
+  .modal-hud div{margin-bottom:3px;}
+  .modal-nav-arrows{ position:absolute; bottom:14px; left:14px; right:14px; display:flex; justify-content:space-between; }
+  .arrow-btn{
+    font-family:'IBM Plex Mono'; font-size:11px; padding:8px 12px; background:rgba(10,10,10,0.55);
+    border:1px solid var(--line); color:var(--text); cursor:pointer;
+  }
+  .arrow-btn:hover{border-color:var(--accent);}
+  .arrow-btn:disabled{opacity:0.3; cursor:default;}
+  .modal-sheet{ padding:28px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+  .modal-close{
+    position:absolute; top:12px; right:12px; z-index:5; width:32px; height:32px; border-radius:50%;
+    background:rgba(10,10,10,0.6); border:1px solid var(--line); color:var(--text); cursor:pointer; font-size:15px;
+  }
+  .modal-close:hover{border-color:var(--accent);}
+  #modal-role{color:var(--accent-2);}
+  #modal-name{font-size:clamp(22px,3vw,30px);}
+  .modal-specs{ display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:14px 0; }
+  #modal-notes{color:var(--text-dim); font-size:13.5px;}
+  .modal-empty-note{ font-family:'IBM Plex Mono'; font-size:11.5px; color:var(--text-dim); }
+
+  .visually-hidden{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} }
+</style>
+<script type="application/json" id="portfolio-baked-state">{}</script>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+
+<nav>
+  <div class="nav-mark">STUDIO<span>.</span><span>3D</span></div>
+  <ul class="nav-links">
+    <li><a href="#reel">Reel</a></li>
+    <li><a href="#personajes">Personajes</a></li>
+    <li><a href="#sobre-mi">Sobre mí</a></li>
+    <li><a href="#contacto">Contacto</a></li>
+  </ul>
+</nav>
+
+<!-- ================= HERO ================= -->
+<header class="hero" id="inicio">
+
+
+  <div class="hero-bg-image" id="hero-bg-image"></div>
+  <canvas id="viewport-canvas"></canvas>
+  <div class="hero-scrim"></div>
+
+  <div class="hud hud-tl mono">
+    <div id="hud-file">VISOR_PRINCIPAL.obj</div>
+  </div>
+  <div class="hud hud-tr mono">
+    <div>VISTA <span>[ARRASTRA PARA ROTAR]</span></div>
+  </div>
+
+  <div class="hero-body">
+    <div class="role-tag" id="f-role" contenteditable="false">ANIMADOR 3D · CHARACTER &amp; CREATURE</div>
+    <h1 class="hero-name" id="f-name" contenteditable="false">Tu Nombre Aquí</h1>
+    <p class="hero-tagline" id="f-tagline" contenteditable="false">
+      Doy vida a personajes y criaturas para cine, videojuegos y publicidad.
+      Este es un borrador de portfolio — activa el modo edición para reemplazar
+      cada texto, imagen y modelo 3D por los tuyos.
+    </p>
+    <div class="hero-actions">
+      <a href="#reel" class="btn">Ver reel</a>
+      <a href="#personajes" class="btn btn-solid">Ver personajes</a>
+      <label class="btn edit-only-btn">
+        Cambiar figura del encabezado
+        <input type="file" id="hero-obj-input" accept=".obj" style="display:none;" />
+      </label>
+    </div>
+  </div>
+</header>
+
+<!-- ================= REEL ================= -->
+<section id="reel">
+
+  <div class="section-head">
+    <div>
+      <div class="section-num mono">01 — GALERÍA</div>
+      <h2 class="section-title">Reel &amp; capturas</h2>
+    </div>
+    <div class="mono section-note" style="max-width:36ch; text-align:right;">Sube renders, GIFs de turnaround o clips en formato imagen.</div>
+  </div>
+  <div class="reel-grid" id="reel-grid"></div>
+</section>
+
+<!-- ================= PERSONAJES ================= -->
+<section id="personajes">
+
+  <div class="section-head">
+    <div>
+      <div class="section-num mono">02 — FICHAS TÉCNICAS</div>
+      <h2 class="section-title">Personajes</h2>
+    </div>
+    <div class="mono section-note" style="max-width:38ch; text-align:right;">Cada personaje tiene su propia ficha técnica y su propio archivo .obj. Añade los que quieras.</div>
+  </div>
+  <div class="chars-grid" id="chars-grid"></div>
+</section>
+
+<!-- ================= SOBRE MÍ ================= -->
+<section id="sobre-mi">
+
+  <div class="section-head">
+    <div>
+      <div class="section-num mono">03 — PERFIL</div>
+      <h2 class="section-title">Sobre mí</h2>
+    </div>
+  </div>
+  <div class="about-wrap">
+    <div>
+      <p class="about-bio" id="f-bio" contenteditable="false">
+        Escribe aquí tu trayectoria: estudios, estudios en los que trabajaste,
+        el tipo de animación que te apasiona (rigging, animación facial,
+        criaturas, motion capture) y qué te hace distinto.
+      </p>
+      <div class="skills-list" id="skills-list"></div>
+      <button class="add-skill" id="add-skill-btn">+ añadir habilidad</button>
+    </div>
+    <div class="specs">
+      <div class="spec-row"><span class="k">SOFTWARE</span><span id="f-software" contenteditable="false">Maya · Blender · ZBrush</span></div>
+      <div class="spec-row"><span class="k">MOTORES</span><span id="f-engines" contenteditable="false">Unreal · Unity</span></div>
+      <div class="spec-row"><span class="k">UBICACIÓN</span><span id="f-location" contenteditable="false">Remoto / Tolima, Colombia</span></div>
+      <div class="spec-row"><span class="k">DISPONIBILIDAD</span><span id="f-availability" contenteditable="false">Freelance</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CONTACTO ================= -->
+<section id="contacto">
+  <div class="section-head">
+    <div>
+      <div class="section-num mono">04 — CONTACTO</div>
+      <h2 class="section-title">Hablemos</h2>
+    </div>
+  </div>
+  <div class="contact-wrap">
+    <a class="contact-email" id="f-email" href="mailto:tu@email.com" contenteditable="false">tu@email.com</a>
+    <div class="socials" id="socials-list">
+      <a href="#" contenteditable="false">ArtStation</a>
+      <a href="#" contenteditable="false">LinkedIn</a>
+      <a href="#" contenteditable="false">Instagram</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>Portafolio 3D</span>
+  <span id="footer-year"></span>
+</footer>
+
+<!-- ================= TOOLBAR ================= -->
+<div class="toolbar">
+  <button class="tb-btn active" id="toggle-edit">Modo edición</button>
+  <div class="tb-sep"></div>
+  <label class="tb-color" title="Color de acento">
+    <input type="color" id="accent-picker" value="#F4B942" />
+  </label>
+  <label class="tb-color" title="Color de fondo">
+    <input type="color" id="bg-picker" value="#241608" />
+  </label>
+  <div class="tb-sep"></div>
+  <label class="tb-btn" style="cursor:pointer;">
+    Imagen de fondo
+    <input type="file" id="bg-image-input" accept="image/*" style="display:none;" />
+  </label>
+  <button class="tb-btn" id="bg-image-clear" title="Quitar imagen de fondo" style="display:none;">Quitar fondo</button>
+  <div class="tb-sep"></div>
+  <label class="tb-color" title="Color de fondo de las tarjetas de personaje">
+    <input type="color" id="card-bg-picker" value="#3A2812" />
+  </label>
+  <label class="tb-btn" style="cursor:pointer;" title="Textura/imagen de fondo para las tarjetas de personaje">
+    Textura de tarjetas
+    <input type="file" id="card-bg-image-input" accept="image/*" style="display:none;" />
+  </label>
+  <button class="tb-btn" id="card-bg-image-clear" title="Quitar textura de las tarjetas" style="display:none;">Quitar textura</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="add-text-btn">+ Texto</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="sprite-dec" title="Quitar un sprite">－</button>
+  <span class="save-note" id="sprite-count">Sprites: 0</span>
+  <button class="tb-btn" id="sprite-inc" title="Agregar un ícono al azar">＋</button>
+  <label class="tb-btn" style="cursor:pointer;" title="Sube tus propios sprites (.svg, .png...)">
+    Subir sprite
+    <input type="file" id="sprite-upload-input" accept="image/svg+xml,image/png,image/webp,image/gif" multiple style="display:none;" />
+  </label>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="export-btn" title="Descarga un index.html con tu diseño actual, listo para subir">Exportar para publicar</button>
+  <span class="save-note" id="save-note">cambios guardados</span>
+</div>
+
+<div id="freeform-layer"></div>
+<div id="sprite-layer"></div>
+
+<!-- ================= PANEL DE ESTILO POR TEXTO ================= -->
+<div class="tbx-panel mono" id="tbx-panel" hidden>
+  <span class="tbx-label" id="tbx-label">Texto</span>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="tbx-dec" title="Reducir tamaño">A-</button>
+  <button class="tb-btn" id="tbx-inc" title="Aumentar tamaño">A+</button>
+  <select class="tb-btn" id="tbx-font" title="Tipo de letra">
+    <option value="">— Original —</option>
+    <option value="'Fredoka', sans-serif">Fredoka (redondeada)</option>
+    <option value="'Press Start 2P', monospace">Press Start 2P (pixel)</option>
+    <option value="'Inter', sans-serif">Inter</option>
+    <option value="'IBM Plex Mono', monospace">IBM Plex Mono</option>
+    <option value="Georgia, serif">Georgia (serif)</option>
+    <option value="Arial, sans-serif">Arial</option>
+    <option value="'Courier New', monospace">Courier New (mono)</option>
+  </select>
+  <label class="tb-color" title="Color del texto">
+    <input type="color" id="tbx-color" />
+  </label>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="tbx-reset" title="Quitar personalización de este texto">Restablecer</button>
+  <button class="tb-btn" id="tbx-close" title="Cerrar">✕</button>
+</div>
+
+<!-- ================= MODAL PERSONAJE ================= -->
+<div class="char-modal" id="char-modal" hidden>
+  <div class="char-modal-inner">
+    <button class="modal-close" id="modal-close">✕</button>
+    <div class="modal-viewer">
+      <canvas id="modal-canvas"></canvas>
+      <div class="hud modal-hud mono">
+        <div id="modal-hud-file">SIN_ARCHIVO.obj</div>
+        <div id="modal-hud-verts">VÉRTICES: —</div>
+      </div>
+      <div class="modal-nav-arrows">
+        <button class="arrow-btn" id="modal-prev">← ANTERIOR</button>
+        <button class="arrow-btn" id="modal-next">SIGUIENTE →</button>
+      </div>
+    </div>
+    <div class="modal-sheet">
+      <div class="mono" id="modal-role">ROL</div>
+      <h3 id="modal-name">Nombre</h3>
+      <div class="modal-specs">
+        <div class="char-spec-row"><span class="k">ESPECIE / TIPO</span><span id="modal-species">—</span></div>
+        <div class="char-spec-row"><span class="k">SOFTWARE</span><span id="modal-software">—</span></div>
+        <div class="char-spec-row"><span class="k">AÑO</span><span id="modal-year">—</span></div>
+        <div class="char-spec-row"><span class="k">POLÍGONOS</span><span id="modal-verts-2">—</span></div>
+      </div>
+      <p id="modal-notes">—</p>
+      <div class="modal-empty-note" id="modal-empty-note" style="display:none;">
+        Este personaje aún no tiene archivo .obj — sube uno desde su tarjeta para verlo aquí.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     ⚙️ CONFIGURACIÓN — EDITA AQUÍ TUS ARCHIVOS
+     Las rutas son relativas a este index.html. Estructura esperada:
+
+       portfolio/
+         index.html            <- este archivo
+         assets/
+           images/             <- fotos, renders, gifs, miniaturas
+           models/             <- archivos .obj
+
+     Para ver una imagen del reel: pon el archivo en assets/images/
+     y agrega una línea en CONFIG.reel de abajo.
+
+     Para un personaje: pon su .obj en assets/models/ (y opcionalmente
+     una miniatura en assets/images/) y agrega un objeto en
+     CONFIG.characters.
+
+     IMPORTANTE: para que los .obj carguen, este archivo debe abrirse
+     desde un servidor local (no con doble clic). Ver README.md.
+  ============================================================ */
+  const CONFIG = {
+    // Personaje que se muestra girando en el encabezado (0 = el primero de la lista).
+    heroCharacter: 0,
+    reel: [
+      { src: 'assets/images/reunion_animales.jpg', caption: 'reunion_animales' },
+    ],
+    // Para cada personaje: obj = modelo, texture = color, normalMap y roughnessMap
+    // son opcionales (dan relieve y brillo). Las rutas son relativas a este archivo.
+    characters: [
+      {
+        name: 'Cerdo',
+        role: 'Seguidor del placer · Carismático · Ama ganar',
+        software: 'Blender',
+        year: '2026',
+        notes: '“La vida es mejor cuando se juega en grande.”',
+        thumb: 'assets/images/cerdo.jpg',
+        obj: 'assets/models/cerdo/cerdo.obj',
+        texture: 'assets/models/cerdo/color.jpg',
+        normalMap: 'assets/models/cerdo/normal.jpg',
+        roughnessMap: 'assets/models/cerdo/roughness.jpg'
+      },
+      {
+        name: 'Mapache',
+        role: 'Travieso · Ingenioso · Siempre encuentra la forma',
+        software: 'Blender',
+        year: '2026',
+        notes: '“Si hay un problema... yo ya tengo la solución.”',
+        thumb: 'assets/images/mapache.jpg',
+        obj: 'assets/models/mapache/mapache.obj',
+        texture: 'assets/models/mapache/color.jpg',
+        normalMap: 'assets/models/mapache/normal.jpg',
+        roughnessMap: 'assets/models/mapache/roughness.jpg'
+      },
+      {
+        name: 'Oso',
+        role: 'Tranquilo · Leal · Protector',
+        software: 'Blender',
+        year: '2026',
+        notes: '“No hablo mucho... pero siempre estoy ahí.”',
+        thumb: 'assets/images/oso.jpg',
+        obj: 'assets/models/oso/oso.obj',
+        texture: 'assets/models/oso/color.jpg',
+        normalMap: 'assets/models/oso/normal.jpg',
+        roughnessMap: 'assets/models/oso/roughness.jpg'
+      },
+      {
+        name: 'Zorro',
+        role: 'Astuto · Seguro de sí mismo · Siempre tiene un plan',
+        software: 'Blender',
+        year: '2026',
+        notes: '“El riesgo también es una jugada.”',
+        thumb: 'assets/images/zorro.jpg',
+        obj: 'assets/models/zorro/zorro.obj',
+        texture: 'assets/models/zorro/color.jpg',
+        normalMap: 'assets/models/zorro/normal.jpg',
+        roughnessMap: 'assets/models/zorro/roughness.jpg'
+      },
+    ]
+  };
+
+  // Visitante = la página abierta desde internet sin ?editar. Los visitantes
+  // siempre ven el diseño publicado y no se les guarda nada en su navegador
+  // (así, cuando vuelvas a publicar, verán tu versión nueva).
+  const IS_LOCAL_COPY = location.protocol === 'file:' || ['localhost','127.0.0.1','[::1]',''].includes(location.hostname);
+  const IS_VISITOR = !IS_LOCAL_COPY && !new URLSearchParams(location.search).has('editar');
+
+  // Copia limpia de la página tal como se cargó, antes de que el script la
+  // modifique. "Exportar para publicar" parte de esta copia.
+  const ORIGINAL_HTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+  /* ============================================================
+     UTILIDAD: FACTORY DE VISOR THREE.JS (hero + modal comparten esto)
+  ============================================================ */
+  function createViewer(canvas){
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x241608);
+    scene.fog = new THREE.Fog(0x241608, 4, 9);
+
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    camera.position.set(0, 0.3, 4.2);
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    keyLight.position.set(3, 4, 4);
+    scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight(0xF4B942, 0.9);
+    rimLight.position.set(-3, -2, -3);
+    scene.add(rimLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+    const grid = new THREE.GridHelper(10, 20, 0x4A331A, 0x4A331A);
+    grid.position.y = -1.3;
+    scene.add(grid);
+
+    const textureLoader = new THREE.TextureLoader();
+    let currentMesh = null;
+    function setMesh(geometry){
+      if(currentMesh){
+        scene.remove(currentMesh);
+        currentMesh.geometry.dispose();
+        (Array.isArray(currentMesh.material) ? currentMesh.material : [currentMesh.material]).forEach(m=>m.dispose());
+      }
+      const hasUV = !!(geometry.userData && geometry.userData.hasUV);
+      const names = (geometry.userData && geometry.userData.materialNames && geometry.userData.materialNames.length)
+        ? geometry.userData.materialNames : ['_default'];
+      const materials = names.map(()=> new THREE.MeshStandardMaterial({
+        color:0xE8D4A8, metalness:0.0, roughness:0.75, flatShading:!hasUV
+      }));
+      currentMesh = new THREE.Mesh(geometry, materials);
+      scene.add(currentMesh);
+    }
+    // materialName es opcional: si el modelo tiene varios materiales, indica a cuál
+    // aplicar la textura; si se omite, se aplica al primero (modelos de un solo material).
+    function setTexture(source, materialName){
+      if(!currentMesh) return;
+      const mats = Array.isArray(currentMesh.material) ? currentMesh.material : [currentMesh.material];
+      const names = (currentMesh.geometry.userData && currentMesh.geometry.userData.materialNames) || ['_default'];
+      let idx = 0;
+      if(materialName){
+        const found = names.indexOf(materialName);
+        if(found >= 0) idx = found;
+      }
+      const mat = mats[idx];
+      if(!mat) return;
+      if(!source){
+        mat.map = null;
+        mat.color.set(0xE8D4A8);
+        mat.needsUpdate = true;
+        return;
+      }
+      textureLoader.load(source, (tex)=>{
+        tex.encoding = THREE.sRGBEncoding;
+        tex.flipY = true;
+        mat.map = tex;
+        mat.color.set(0xffffff);
+        mat.needsUpdate = true;
+      }, undefined, ()=>{
+        console.warn('No se pudo cargar la textura:', source);
+      });
+    }
+    // Mapas extra (relieve y rugosidad) que se aplican a todos los materiales del modelo.
+    function setPbrMaps(maps){
+      if(!currentMesh) return;
+      const mats = Array.isArray(currentMesh.material) ? currentMesh.material : [currentMesh.material];
+      const meshAtCall = currentMesh;
+      [['normal','normalMap'],['roughness','roughnessMap']].forEach(([key, prop])=>{
+        const src = maps && maps[key];
+        if(!src){ mats.forEach(m=>{ m[prop] = null; m.needsUpdate = true; }); return; }
+        textureLoader.load(src, (tex)=>{
+          if(currentMesh !== meshAtCall) return; // ya se cambió de modelo
+          tex.flipY = true;
+          mats.forEach(m=>{ m[prop] = tex; if(prop === 'roughnessMap') m.roughness = 1.0; m.needsUpdate = true; });
+        }, undefined, ()=> console.warn('No se pudo cargar el mapa:', src));
+      });
+    }
+    function setTransparent(on){
+      scene.background = on ? null : new THREE.Color(0x241608);
+      scene.fog = on ? null : new THREE.Fog(0x241608, 4, 9);
+    }
+
+    let rotY = 0.4, rotX = -0.1, dragging = false, lastX = 0, lastY = 0, autoRotate = true;
+    let resumeTimer = null;
+    function pauseAutoRotate(){
+      autoRotate = false;
+      clearTimeout(resumeTimer);
+    }
+    function scheduleResume(){
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(()=>{ autoRotate = true; }, 1200);
+    }
+    canvas.addEventListener('pointerdown', (e)=>{
+      dragging = true; pauseAutoRotate(); lastX = e.clientX; lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      const dx = e.clientX - lastX, dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      rotY += dx * 0.006; rotX += dy * 0.006;
+      rotX = Math.max(-1.1, Math.min(1.1, rotX));
+    });
+    canvas.addEventListener('pointerup', ()=>{ dragging = false; scheduleResume(); });
+    canvas.addEventListener('pointerleave', ()=>{ dragging = false; scheduleResume(); });
+    canvas.addEventListener('wheel', (e)=>{
+      e.preventDefault();
+      pauseAutoRotate(); scheduleResume();
+      camera.position.z = Math.max(2.2, Math.min(8, camera.position.z + e.deltaY * 0.003));
+    }, { passive:false });
+
+    function resize(){
+      const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
+      if(w === 0 || h === 0) return;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function tick(){
+      if(autoRotate && !reduceMotion) rotY += 0.0022;
+      if(currentMesh){ currentMesh.rotation.y = rotY; currentMesh.rotation.x = rotX; }
+      renderer.render(scene, camera);
+    }
+
+    return { setMesh, setTexture, setPbrMaps, resize, tick, scene, camera, setTransparent };
+  }
+
+  /* ============================================================
+     PARSER OBJ MINIMALISTA
+  ============================================================ */
+  function parseOBJ(text){
+    const vertices = [];
+    const uvsRaw = [];
+    const positions = [];
+    const uvs = [];
+    let hasUV = false;
+    const materialNames = [];
+    const materialIndexOf = {};
+    function getMatIndex(name){
+      if(!(name in materialIndexOf)){
+        materialIndexOf[name] = materialNames.length;
+        materialNames.push(name);
+      }
+      return materialIndexOf[name];
+    }
+    let currentMatIndex = getMatIndex('_default');
+    const groups = []; // { start, count, materialIndex } — tramos consecutivos por material
+
+    const lines = text.split('\n');
+    for(let i=0;i<lines.length;i++){
+      const line = lines[i].trim();
+      if(line.startsWith('v ')){
+        vertices.push(line.split(/\s+/).slice(1,4).map(Number));
+      } else if(line.startsWith('vt ')){
+        uvsRaw.push(line.split(/\s+/).slice(1,3).map(Number));
+      } else if(line.startsWith('usemtl')){
+        const name = line.split(/\s+/).slice(1).join(' ').trim() || '_default';
+        currentMatIndex = getMatIndex(name);
+      } else if(line.startsWith('f ')){
+        const raw = line.split(/\s+/).slice(1);
+        const idx = raw.map(p=>{
+          const segs = p.split('/');
+          const vi = parseInt(segs[0], 10);
+          const ti = segs[1] ? parseInt(segs[1], 10) : NaN;
+          return {
+            v: vi > 0 ? vi - 1 : vertices.length + vi,
+            t: !isNaN(ti) ? (ti > 0 ? ti - 1 : uvsRaw.length + ti) : -1
+          };
+        });
+        for(let k=1;k<idx.length-1;k++){
+          const a = idx[0], b = idx[k], c = idx[k+1];
+          const av = vertices[a.v], bv = vertices[b.v], cv = vertices[c.v];
+          if(av && bv && cv){
+            const startVertex = positions.length / 3;
+            positions.push(...av, ...bv, ...cv);
+            [a,b,c].forEach(p=>{
+              const uv = uvsRaw[p.t];
+              if(uv){ uvs.push(uv[0], uv[1]); hasUV = true; }
+              else { uvs.push(0,0); }
+            });
+            const last = groups[groups.length-1];
+            if(last && last.materialIndex === currentMatIndex){
+              last.count += 3;
+            } else {
+              groups.push({ start: startVertex, count: 3, materialIndex: currentMatIndex });
+            }
+          }
+        }
+      }
+    }
+    // Quita materiales sin caras (ej. el "_default" inicial cuando el archivo
+    // declara "usemtl Material" desde el principio) y renumera los grupos.
+    const used = [...new Set(groups.map(g=>g.materialIndex))].sort((x,y)=>x-y);
+    const remap = {}; used.forEach((oldIdx, newIdx)=>{ remap[oldIdx] = newIdx; });
+    groups.forEach(g=>{ g.materialIndex = remap[g.materialIndex]; });
+    const usedNames = used.length ? used.map(i=>materialNames[i]) : ['_default'];
+    return {
+      positions: new Float32Array(positions),
+      uvs: hasUV ? new Float32Array(uvs) : null,
+      vertexCount: vertices.length,
+      materialNames: usedNames,
+      groups
+    };
+  }
+
+  function buildGeometryFromOBJ(text){
+    const { positions, uvs, vertexCount, materialNames, groups } = parseOBJ(text);
+    if(positions.length === 0) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    if(uvs) geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.computeVertexNormals();
+    geo.center();
+    geo.computeBoundingSphere();
+    const radius = geo.boundingSphere ? geo.boundingSphere.radius : 1;
+    const scale = radius > 0 ? 1.4 / radius : 1;
+    geo.scale(scale, scale, scale);
+    groups.forEach(g=> geo.addGroup(g.start, g.count, g.materialIndex));
+    geo.userData.vertexCount = vertexCount;
+    geo.userData.materialNames = materialNames;
+    geo.userData.hasUV = !!uvs;
+    return geo;
+  }
+
+  /* ============================================================
+     ESTADO GENERAL + PERSISTENCIA (solo texto/acento)
+  ============================================================ */
+  let state = { accent:"#F4B942", bg:"#241608", bgImage:null, cardBg:"#3A2812", cardBgImage:null, skills:["Rigging","Character Animation","Motion Capture Clean-up","Lighting básico"], customTexts:[], sprites:[] };
+  const editableFieldIds = ["f-role","f-name","f-tagline","f-bio","f-software","f-engines","f-location","f-availability","f-email"];
+
+  const LOCAL_STORAGE_KEY = 'portfolio3d:content';
+
+  // Intenta leer el respaldo guardado, primero desde window.storage (solo
+  // existe dentro de Claude) y si no está disponible, desde localStorage
+  // del navegador (lo que sí funciona al abrir el archivo por tu cuenta,
+  // con doble clic o con un servidor local).
+  // Diseño "horneado" dentro del archivo con "Exportar para publicar".
+  // Es lo que ven los visitantes cuando el navegador no tiene nada guardado.
+  function readBakedRaw(){
+    const el = document.getElementById('portfolio-baked-state');
+    if(!el) return null;
+    const raw = el.textContent.trim();
+    return raw && raw !== '{}' ? raw : null;
+  }
+  async function readPersistedRaw(){
+    if(IS_VISITOR){
+      const baked = readBakedRaw();
+      if(baked) console.info('[portfolio] Usando el diseño publicado dentro del archivo ✓');
+      return baked;
+    }
+    try{
+      const res = await window.storage.get('portfolio:content');
+      if(res && res.value){ console.info('[portfolio] Cargado desde window.storage ✓'); return res.value; }
+    }catch(e){ /* window.storage no existe fuera de Claude: seguimos con localStorage */ }
+    try{
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if(raw){ console.info('[portfolio] Cargado desde localStorage ✓ (' + Math.round(raw.length/1024) + ' KB)'); return raw; }
+    }catch(e){ console.error('[portfolio] localStorage no accesible:', e.message); }
+    const baked = readBakedRaw();
+    if(baked){ console.info('[portfolio] Usando el diseño publicado dentro del archivo ✓'); return baked; }
+    console.info('[portfolio] Sin cambios guardados: se muestra el contenido de CONFIG.');
+    return null;
+  }
+
+  async function loadPersisted(){
+    const raw = await readPersistedRaw();
+    if(!raw) return;
+    try{
+      const saved = JSON.parse(raw);
+      if(saved.accent) state.accent = saved.accent;
+      if(saved.bg) state.bg = saved.bg;
+      if(saved.bgImage) state.bgImage = saved.bgImage;
+      if(saved.cardBg) state.cardBg = saved.cardBg;
+      if(saved.cardBgImage) state.cardBgImage = saved.cardBgImage;
+      if(saved.skills) state.skills = saved.skills;
+      if(saved.textboxes) state.textboxes = saved.textboxes;
+      if(saved.customTexts) state.customTexts = saved.customTexts;
+      if(saved.sprites) state.sprites = saved.sprites;
+      if(saved.characters) state.characters = saved.characters;
+      if(saved.reelItems) state.reelItems = saved.reelItems;
+      if(saved.fields){
+        editableFieldIds.forEach(id=>{
+          const el = document.getElementById(id);
+          if(el && saved.fields[id] !== undefined) el.innerText = saved.fields[id];
+        });
+      }
+    }catch(e){}
+  }
+  let saveTimeout = null;
+  function serializeCharacters(){
+    return characters.map(ch => ({
+      id: ch.id, name: ch.name, role: ch.role, software: ch.software, year: ch.year,
+      notes: ch.notes, thumb: ch.thumb, objName: ch.objName,
+      objPath: ch.objPath || null, pbr: ch.pbr || null,
+      objRaw: ch.objPath ? null : ch.objRaw, // los de CONFIG se recargan desde su ruta
+      materialNames: ch.materialNames, textures: ch.textures
+    }));
+  }
+
+  // Construye el objeto a guardar. includeHeavyData=true guarda todo
+  // (imágenes, .obj, texturas en base64). includeHeavyData=false genera una
+  // versión "liviana" sin esos datos pesados, usada como respaldo cuando el
+  // navegador no tiene espacio suficiente en localStorage para guardar todo.
+  function buildPersistPayload(includeHeavyData){
+    const fields = {};
+    editableFieldIds.forEach(id=>{ const el = document.getElementById(id); if(el) fields[id] = el.innerText; });
+    state.customTexts.forEach(ct=>{ const el = document.getElementById(ct.id); if(el) ct.text = el.innerText; });
+    return JSON.stringify({
+      accent: state.accent, bg: state.bg, bgImage: includeHeavyData ? state.bgImage : null,
+      cardBg: state.cardBg, cardBgImage: includeHeavyData ? state.cardBgImage : null,
+      skills: state.skills, textboxes: state.textboxes,
+      customTexts: state.customTexts, sprites: state.sprites, fields,
+      characters: includeHeavyData ? serializeCharacters() : [],
+      reelItems: includeHeavyData ? reelItems : [],
+      _lite: !includeHeavyData
+    });
+  }
+
+  async function persist(){
+    if(IS_VISITOR) return;
+    const payload = buildPersistPayload(true);
+    let saved = false;
+    let lite = false;
+    let failReason = '';
+    try{
+      const res = await window.storage.set('portfolio:content', payload);
+      if(res){ saved = true; }
+      else { failReason = 'window.storage.set devolvió null'; }
+    }catch(e){ failReason = 'window.storage no disponible (' + e.message + ')'; }
+    if(!saved){
+      try{
+        localStorage.setItem(LOCAL_STORAGE_KEY, payload);
+        saved = true;
+        console.info('[portfolio] Guardado en localStorage ✓ (' + Math.round(payload.length/1024) + ' KB)');
+      }catch(e){
+        failReason += ' | localStorage falló: ' + e.message;
+        console.warn('[portfolio] Guardado completo falló, probando versión liviana:', failReason);
+        // La imagen de fondo, los personajes 3D o las texturas pesan demasiado
+        // para el cupo de localStorage. Reintentamos guardando solo colores,
+        // textos y sprites, para no perder TODO. El usuario debe usar
+        // "Exportar HTML" para no perder sus modelos 3D y texturas.
+        try{
+          const litePayload = buildPersistPayload(false);
+          localStorage.setItem(LOCAL_STORAGE_KEY, litePayload);
+          saved = true; lite = true;
+          console.info('[portfolio] Guardado liviano en localStorage ✓ (' + Math.round(litePayload.length/1024) + ' KB)');
+        }catch(e2){
+          console.error('[portfolio] No se pudo guardar ni la versión liviana:', e2.message);
+          flashSaveNote(false);
+        }
+      }
+    }
+    if(saved) flashSaveNote(lite ? 'lite' : true);
+  }
+  function schedulePersist(){ clearTimeout(saveTimeout); saveTimeout = setTimeout(persist, 500); }
+  function flashSaveNote(status){
+    const n = document.getElementById('save-note');
+    if(status === false){
+      n.textContent = '⚠ no se pudo guardar (ver consola)';
+      n.style.color = '#ff8a6b';
+    } else if(status === 'lite'){
+      n.textContent = '⚠ guardado parcial: tus modelos 3D/texturas no entraron. Usa "Exportar para publicar" para no perderlos.';
+      n.style.color = '#ffb84d';
+    } else {
+      n.textContent = 'cambios guardados';
+      n.style.color = '';
+    }
+    n.style.opacity = '1';
+    clearTimeout(flashSaveNote._t);
+    flashSaveNote._t = setTimeout(()=>{ n.style.opacity = '0.4'; }, status === true ? 900 : 5000);
+  }
+
+  const body = document.body;
+  const toggleBtn = document.getElementById('toggle-edit');
+  function setEditMode(on){
+    body.classList.toggle('edit-mode', on);
+    toggleBtn.classList.toggle('active', on);
+    toggleBtn.textContent = on ? "Modo edición: ON" : "Modo edición";
+    editableFieldIds.forEach(id=>{ const el = document.getElementById(id); if(el) el.setAttribute('contenteditable', on ? 'true':'false'); });
+    document.querySelectorAll('.custom-text-inner').forEach(el=> el.setAttribute('contenteditable', on ? 'true':'false'));
+    document.querySelectorAll('.socials a').forEach(a=>a.setAttribute('contenteditable', on ? 'true':'false'));
+    if(!on){
+      document.getElementById('tbx-panel').hidden = true;
+      document.querySelectorAll('.textbox.tb-active').forEach(w=>w.classList.remove('tb-active'));
+      selectedTextboxId = null;
+    }
+    renderChars();
+  }
+  toggleBtn.addEventListener('click', ()=> setEditMode(!body.classList.contains('edit-mode')));
+  editableFieldIds.forEach(id=>{ const el = document.getElementById(id); if(el) el.addEventListener('input', schedulePersist); });
+  document.getElementById('socials-list').addEventListener('input', schedulePersist);
+
+  /* ============================================================
+     CUADROS DE TEXTO PERSONALIZABLES (mover / escalar / color / tamaño)
+  ============================================================ */
+  if(!state.textboxes) state.textboxes = {};
+  let selectedTextboxId = null;
+
+  function getTbCfg(id){
+    if(!state.textboxes[id]) state.textboxes[id] = { x:0, y:0, scale:1, color:null, fontSize:null, fontFamily:null };
+    return state.textboxes[id];
+  }
+
+  function rgbToHex(rgb){
+    const m = rgb.match(/\d+/g);
+    if(!m) return '#ECEAE3';
+    return '#' + m.slice(0,3).map(n=>{
+      const h = parseInt(n,10).toString(16);
+      return h.length === 1 ? '0'+h : h;
+    }).join('');
+  }
+
+  function applyTextboxStyle(id){
+    const cfg = getTbCfg(id);
+    const wrapper = document.querySelector('.textbox[data-tb-id="'+id+'"]');
+    const inner = document.getElementById(id);
+    if(!wrapper || !inner) return;
+    wrapper.style.transform = 'translate(' + (cfg.x||0) + 'px, ' + (cfg.y||0) + 'px) scale(' + (cfg.scale||1) + ')';
+    wrapper.style.transformOrigin = 'top left';
+    inner.style.color = cfg.color || '';
+    inner.style.fontSize = cfg.fontSize ? (cfg.fontSize + 'px') : '';
+    inner.style.fontFamily = cfg.fontFamily || '';
+  }
+
+  function selectTextbox(id, wrapper){
+    document.querySelectorAll('.textbox.tb-active').forEach(w=>w.classList.remove('tb-active'));
+    wrapper.classList.add('tb-active');
+    selectedTextboxId = id;
+    const panel = document.getElementById('tbx-panel');
+    panel.hidden = false;
+    document.getElementById('tbx-label').textContent = id.replace('f-', '').toUpperCase();
+    const cfg = getTbCfg(id);
+    const inner = document.getElementById(id);
+    document.getElementById('tbx-color').value = cfg.color || rgbToHex(getComputedStyle(inner).color);
+    document.getElementById('tbx-font').value = cfg.fontFamily || '';
+  }
+
+  function initTextboxInteractivity(wrapper, id, innerEl){
+    const moveHandle = document.createElement('div');
+    moveHandle.className = 'tb-handle tb-move-handle';
+    moveHandle.textContent = '✥';
+    moveHandle.title = 'Arrastra para mover';
+    wrapper.appendChild(moveHandle);
+
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'tb-handle tb-resize-handle';
+    resizeHandle.textContent = '⤡';
+    resizeHandle.title = 'Arrastra para escalar';
+    wrapper.appendChild(resizeHandle);
+
+    wrapper.addEventListener('click', ()=> selectTextbox(id, wrapper));
+    innerEl.addEventListener('focus', ()=> selectTextbox(id, wrapper));
+
+    moveHandle.addEventListener('pointerdown', (e)=>{
+      if(!body.classList.contains('edit-mode')) return;
+      e.preventDefault(); e.stopPropagation();
+      selectTextbox(id, wrapper);
+      const cfg = getTbCfg(id);
+      const startX = e.clientX, startY = e.clientY;
+      const origX = cfg.x || 0, origY = cfg.y || 0;
+      moveHandle.setPointerCapture(e.pointerId);
+      function onMove(ev){
+        cfg.x = origX + (ev.clientX - startX);
+        cfg.y = origY + (ev.clientY - startY);
+        applyTextboxStyle(id);
+      }
+      function onUp(){
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        schedulePersist();
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+
+    resizeHandle.addEventListener('pointerdown', (e)=>{
+      if(!body.classList.contains('edit-mode')) return;
+      e.preventDefault(); e.stopPropagation();
+      selectTextbox(id, wrapper);
+      const cfg = getTbCfg(id);
+      const rect = wrapper.getBoundingClientRect();
+      const originX = rect.left, originY = rect.top;
+      const startDist = Math.max(1, Math.hypot(e.clientX - originX, e.clientY - originY));
+      const startScale = cfg.scale || 1;
+      resizeHandle.setPointerCapture(e.pointerId);
+      function onMove(ev){
+        const dist = Math.hypot(ev.clientX - originX, ev.clientY - originY);
+        let newScale = startScale * (dist / startDist);
+        newScale = Math.max(0.4, Math.min(3, newScale));
+        cfg.scale = newScale;
+        applyTextboxStyle(id);
+      }
+      function onUp(){
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        schedulePersist();
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+  }
+
+  function wrapAsTextbox(id){
+    const el = document.getElementById(id);
+    if(!el || el.closest('.textbox')) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'textbox';
+    wrapper.dataset.tbId = id;
+    el.parentNode.insertBefore(wrapper, el);
+    wrapper.appendChild(el);
+    initTextboxInteractivity(wrapper, id, el);
+  }
+
+  editableFieldIds.forEach(wrapAsTextbox);
+
+  /* ---------- Cuadros de texto LIBRES (insertados por el usuario) ---------- */
+  let customTextCounter = 1;
+
+  function createCustomTextElement(id, textContent, left, top){
+    const wrapper = document.createElement('div');
+    wrapper.className = 'textbox custom-textbox';
+    wrapper.dataset.tbId = id;
+    wrapper.style.position = 'absolute';
+    wrapper.style.left = left + 'px';
+    wrapper.style.top = top + 'px';
+
+    const inner = document.createElement('div');
+    inner.id = id;
+    inner.className = 'custom-text-inner';
+    inner.textContent = textContent;
+    inner.setAttribute('data-placeholder', 'Escribe algo…');
+    inner.setAttribute('contenteditable', body.classList.contains('edit-mode') ? 'true' : 'false');
+    inner.addEventListener('input', schedulePersist);
+    wrapper.appendChild(inner);
+
+    document.getElementById('freeform-layer').appendChild(wrapper);
+    initTextboxInteractivity(wrapper, id, inner);
+
+    const deleteHandle = document.createElement('div');
+    deleteHandle.className = 'tb-handle tb-delete-handle';
+    deleteHandle.textContent = '✕';
+    deleteHandle.title = 'Eliminar este texto';
+    deleteHandle.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); });
+    deleteHandle.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      wrapper.remove();
+      state.customTexts = state.customTexts.filter(t=>t.id !== id);
+      delete state.textboxes[id];
+      if(selectedTextboxId === id){
+        document.getElementById('tbx-panel').hidden = true;
+        selectedTextboxId = null;
+      }
+      schedulePersist();
+    });
+    wrapper.appendChild(deleteHandle);
+
+    return { wrapper, inner };
+  }
+
+  function addFreeText(){
+    if(!body.classList.contains('edit-mode')) setEditMode(true);
+    const id = 'custom-' + (customTextCounter++);
+    const scrollY = window.scrollY || window.pageYOffset;
+    const left = Math.max(20, Math.round(window.innerWidth/2 - 90));
+    const top = Math.round(scrollY + window.innerHeight/2 - 20);
+    const { wrapper, inner } = createCustomTextElement(id, 'Nuevo texto', left, top);
+    state.customTexts.push({ id, text:'Nuevo texto', left, top });
+    selectTextbox(id, wrapper);
+    inner.focus();
+    schedulePersist();
+  }
+  document.getElementById('add-text-btn').addEventListener('click', addFreeText);
+
+  // reconstruir los textos libres guardados de una sesión anterior
+  function rebuildCustomTexts(){
+    let maxCounter = 0;
+    state.customTexts.forEach(ct=>{
+      createCustomTextElement(ct.id, ct.text, ct.left, ct.top);
+      const num = parseInt(String(ct.id).replace('custom-',''), 10);
+      if(!isNaN(num)) maxCounter = Math.max(maxCounter, num);
+    });
+    customTextCounter = maxCounter + 1;
+  }
+
+  /* ============================================================
+     SPRITES DECORATIVOS (editables: agregar/quitar/cambiar ícono)
+  ============================================================ */
+  const SPRITE_EMOJIS = ['⚔️','🛡️','💎','🪙','🍄','📜','🗝️','🧪','❤️','📦','🏹','🔮','🪓','🐉','⚗️','🧿'];
+  let spriteCounter = 1;
+
+  function randomSpritePosition(){
+    const docHeight = Math.max(document.documentElement.scrollHeight, window.innerHeight);
+    return {
+      top: Math.round(80 + Math.random() * Math.max(200, docHeight - 200)),
+      left: Math.round(3 + Math.random() * 90) // % del ancho
+    };
+  }
+
+  function createSpriteElement(sprite){
+    const el = document.createElement('span');
+    el.className = 'bg-sprite' + (sprite.type === 'image' ? ' bg-sprite-image' : '');
+    el.dataset.spriteId = sprite.id;
+    el.style.top = sprite.top + 'px';
+    el.style.left = sprite.left + '%';
+    el.style.animationDelay = (sprite.id % 10) * 0.4 + 's';
+
+    if(sprite.type === 'image'){
+      const img = document.createElement('img');
+      img.src = sprite.dataUrl;
+      img.alt = sprite.fileName || 'sprite';
+      img.draggable = false;
+      el.appendChild(img);
+      el.title = 'Clic: reemplazar esta imagen';
+    } else {
+      el.appendChild(document.createTextNode(sprite.emoji));
+      el.title = 'Clic: cambiar ícono';
+    }
+
+    const del = document.createElement('span');
+    del.className = 'sprite-delete';
+    del.textContent = '✕';
+    del.title = 'Eliminar este sprite';
+    del.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      state.sprites = state.sprites.filter(s=> s.id !== sprite.id);
+      renderSprites();
+      schedulePersist();
+    });
+    el.appendChild(del);
+
+    el.addEventListener('click', (e)=>{
+      if(!body.classList.contains('edit-mode')) return;
+      if(e.target === del) return;
+      if(sprite.type === 'image'){
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/svg+xml,image/png,image/webp,image/gif';
+        input.addEventListener('change', (ev)=>{
+          const file = ev.target.files[0]; if(!file) return;
+          const reader = new FileReader();
+          reader.onload = ()=>{
+            sprite.dataUrl = reader.result;
+            sprite.fileName = file.name;
+            renderSprites();
+            schedulePersist();
+          };
+          reader.readAsDataURL(file);
+        });
+        input.click();
+      } else {
+        const idx = SPRITE_EMOJIS.indexOf(sprite.emoji);
+        sprite.emoji = SPRITE_EMOJIS[(idx + 1) % SPRITE_EMOJIS.length];
+        renderSprites();
+        schedulePersist();
+      }
+    });
+
+    return el;
+  }
+
+  function renderSprites(){
+    const layer = document.getElementById('sprite-layer');
+    layer.innerHTML = '';
+    state.sprites.forEach(sprite=> layer.appendChild(createSpriteElement(sprite)));
+    document.getElementById('sprite-count').textContent = 'Sprites: ' + state.sprites.length;
+  }
+
+  function addSprite(){
+    const pos = randomSpritePosition();
+    const emoji = SPRITE_EMOJIS[Math.floor(Math.random() * SPRITE_EMOJIS.length)];
+    state.sprites.push({ id: spriteCounter++, type:'emoji', emoji, top: pos.top, left: pos.left });
+    renderSprites();
+    schedulePersist();
+  }
+
+  function addImageSprite(file){
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const pos = randomSpritePosition();
+      state.sprites.push({
+        id: spriteCounter++, type:'image', dataUrl: reader.result, fileName: file.name,
+        top: pos.top, left: pos.left
+      });
+      renderSprites();
+      schedulePersist();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeSprite(){
+    if(state.sprites.length === 0) return;
+    state.sprites.pop();
+    renderSprites();
+    schedulePersist();
+  }
+
+  document.getElementById('sprite-inc').addEventListener('click', addSprite);
+  document.getElementById('sprite-dec').addEventListener('click', removeSprite);
+  document.getElementById('sprite-upload-input').addEventListener('change', (e)=>{
+    Array.from(e.target.files || []).forEach(addImageSprite);
+    e.target.value = '';
+  });
+
+  document.getElementById('tbx-dec').addEventListener('click', ()=>{
+    if(!selectedTextboxId) return;
+    const cfg = getTbCfg(selectedTextboxId);
+    const inner = document.getElementById(selectedTextboxId);
+    const base = cfg.fontSize || parseFloat(getComputedStyle(inner).fontSize);
+    cfg.fontSize = Math.max(9, Math.round(base - 2));
+    applyTextboxStyle(selectedTextboxId);
+    schedulePersist();
+  });
+  document.getElementById('tbx-inc').addEventListener('click', ()=>{
+    if(!selectedTextboxId) return;
+    const cfg = getTbCfg(selectedTextboxId);
+    const inner = document.getElementById(selectedTextboxId);
+    const base = cfg.fontSize || parseFloat(getComputedStyle(inner).fontSize);
+    cfg.fontSize = Math.min(220, Math.round(base + 2));
+    applyTextboxStyle(selectedTextboxId);
+    schedulePersist();
+  });
+  document.getElementById('tbx-color').addEventListener('input', (e)=>{
+    if(!selectedTextboxId) return;
+    const cfg = getTbCfg(selectedTextboxId);
+    cfg.color = e.target.value;
+    applyTextboxStyle(selectedTextboxId);
+    schedulePersist();
+  });
+  document.getElementById('tbx-font').addEventListener('change', (e)=>{
+    if(!selectedTextboxId) return;
+    const cfg = getTbCfg(selectedTextboxId);
+    cfg.fontFamily = e.target.value || null;
+    applyTextboxStyle(selectedTextboxId);
+    schedulePersist();
+  });
+  document.getElementById('tbx-reset').addEventListener('click', ()=>{
+    if(!selectedTextboxId) return;
+    delete state.textboxes[selectedTextboxId];
+    applyTextboxStyle(selectedTextboxId);
+    document.getElementById('tbx-color').value = rgbToHex(getComputedStyle(document.getElementById(selectedTextboxId)).color);
+    document.getElementById('tbx-font').value = '';
+    schedulePersist();
+  });
+  document.getElementById('tbx-close').addEventListener('click', ()=>{
+    document.getElementById('tbx-panel').hidden = true;
+    document.querySelectorAll('.textbox.tb-active').forEach(w=>w.classList.remove('tb-active'));
+    selectedTextboxId = null;
+  });
+  document.addEventListener('pointerdown', (e)=>{
+    if(!e.target.closest('.textbox') && !e.target.closest('.tbx-panel')){
+      document.getElementById('tbx-panel').hidden = true;
+      document.querySelectorAll('.textbox.tb-active').forEach(w=>w.classList.remove('tb-active'));
+      selectedTextboxId = null;
+    }
+  });
+
+  const accentPicker = document.getElementById('accent-picker');
+  function applyAccent(hex){
+    document.documentElement.style.setProperty('--accent', hex);
+    state.accent = hex;
+    if(typeof particleField !== 'undefined' && particleField) particleField.setColor(hex);
+  }
+  accentPicker.addEventListener('input', (e)=>{ applyAccent(e.target.value); schedulePersist(); });
+
+  const bgPicker = document.getElementById('bg-picker');
+  function applyBg(hex){ document.documentElement.style.setProperty('--bg', hex); state.bg = hex; }
+  bgPicker.addEventListener('input', (e)=>{ applyBg(e.target.value); schedulePersist(); });
+
+  const heroBgImageEl = document.getElementById('hero-bg-image');
+  const bgClearBtn = document.getElementById('bg-image-clear');
+  function applyBgImage(dataUrl){
+    state.bgImage = dataUrl || null;
+    heroBgImageEl.style.backgroundImage = dataUrl ? ('url(' + dataUrl + ')') : 'none';
+    bgClearBtn.style.display = dataUrl ? 'inline-block' : 'none';
+    if(heroViewerRef) heroViewerRef.setTransparent(!!dataUrl);
+  }
+  document.getElementById('bg-image-input').addEventListener('change', (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{ applyBgImage(reader.result); schedulePersist(); };
+    reader.readAsDataURL(file);
+  });
+  bgClearBtn.addEventListener('click', ()=>{ applyBgImage(null); schedulePersist(); });
+  let heroViewerRef = null; // se asigna más abajo, cuando se crea el visor del hero
+
+  const cardBgPicker = document.getElementById('card-bg-picker');
+  function applyCardBg(hex){ document.documentElement.style.setProperty('--card-bg', hex); state.cardBg = hex; }
+  cardBgPicker.addEventListener('input', (e)=>{ applyCardBg(e.target.value); schedulePersist(); });
+
+  const cardBgClearBtn = document.getElementById('card-bg-image-clear');
+  function applyCardBgImage(dataUrl){
+    state.cardBgImage = dataUrl || null;
+    document.documentElement.style.setProperty('--card-bg-image', dataUrl ? ('url(' + dataUrl + ')') : 'none');
+    cardBgClearBtn.style.display = dataUrl ? 'inline-block' : 'none';
+  }
+  document.getElementById('card-bg-image-input').addEventListener('change', (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{ applyCardBgImage(reader.result); schedulePersist(); };
+    reader.readAsDataURL(file);
+  });
+  cardBgClearBtn.addEventListener('click', ()=>{ applyCardBgImage(null); schedulePersist(); });
+
+  /* ============================================================
+     HABILIDADES
+  ============================================================ */
+  const skillsList = document.getElementById('skills-list');
+  function renderSkills(){
+    skillsList.innerHTML = "";
+    state.skills.forEach((skill, idx)=>{
+      const chip = document.createElement('div'); chip.className = 'skill-chip';
+      const label = document.createElement('span'); label.textContent = skill; chip.appendChild(label);
+      const rm = document.createElement('span'); rm.className='rm'; rm.textContent='✕';
+      rm.addEventListener('click', ()=>{ state.skills.splice(idx,1); renderSkills(); schedulePersist(); });
+      chip.appendChild(rm); skillsList.appendChild(chip);
+    });
+  }
+  document.getElementById('add-skill-btn').addEventListener('click', ()=>{
+    const value = prompt("Nueva habilidad:");
+    if(value && value.trim()){ state.skills.push(value.trim()); renderSkills(); schedulePersist(); }
+  });
+
+  /* ============================================================
+     GALERÍA REEL
+  ============================================================ */
+  const reelGrid = document.getElementById('reel-grid');
+  let reelItems = CONFIG.reel.map(item => ({ src: item.src, caption: item.caption }));
+  function renderReel(){
+    reelGrid.innerHTML = "";
+    reelItems.forEach((item, idx)=>{
+      const cell = document.createElement('div'); cell.className = 'reel-item';
+      const img = document.createElement('img'); img.src = item.src; img.alt = item.caption || "pieza del reel";
+      cell.appendChild(img);
+      const cap = document.createElement('div'); cap.className='reel-cap mono'; cap.textContent = item.caption || ("shot_"+String(idx+1).padStart(2,'0'));
+      cell.appendChild(cap);
+      const rm = document.createElement('button'); rm.className='reel-remove'; rm.innerHTML='✕';
+      rm.addEventListener('click', ()=>{ reelItems.splice(idx,1); renderReel(); schedulePersist(); });
+      cell.appendChild(rm);
+      reelGrid.appendChild(cell);
+    });
+    const addCell = document.createElement('label'); addCell.className = 'reel-add';
+    addCell.innerHTML = '<span class="plus">+</span><span>Añadir imagen / gif</span>';
+    const input = document.createElement('input'); input.type='file'; input.accept='image/*';
+    input.addEventListener('change', (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{ reelItems.push({src:reader.result, caption:file.name.replace(/\.[^/.]+$/,"")}); renderReel(); schedulePersist(); };
+      reader.readAsDataURL(file);
+    });
+    addCell.appendChild(input); reelGrid.appendChild(addCell);
+  }
+
+  /* ============================================================
+     PERSONAJES: array de fichas + su propio .obj
+  ============================================================ */
+  let characters = [];
+  let charIdCounter = 1;
+
+  function newCharacter(){
+    return {
+      id: charIdCounter++,
+      name: "Nuevo personaje",
+      role: "Rol / especie",
+      software: "Blender",
+      year: new Date().getFullYear().toString(),
+      notes: "Breve descripción del personaje, su historia o su función en el proyecto.",
+      thumb: null,
+      geometry: null,
+      vertexCount: 0,
+      objName: null,
+      objPath: null,
+      objRaw: null, // texto crudo del .obj, para poder reconstruirlo si se guarda
+      objStatus: null, // null | 'loading' | 'ok' | 'error'
+      materialNames: [], // materiales detectados en el último .obj cargado
+      textures: {} // { [nombreDeMaterial]: { dataUrl, fileName } }
+    };
+  }
+
+  // Aplica todas las texturas guardadas de un personaje a un visor (hero o modal),
+  // una por cada material detectado en su .obj.
+  function applyCharacterTextures(viewer, ch){
+    const names = (ch.materialNames && ch.materialNames.length) ? ch.materialNames : ['_default'];
+    // Si el personaje tiene una sola textura general ("_default") y el modelo
+    // usa otro nombre de material, esa textura se aplica igual.
+    const fallback = names.length === 1 && ch.textures ? ch.textures['_default'] : null;
+    names.forEach(name=>{
+      const tex = (ch.textures && ch.textures[name]) || fallback;
+      viewer.setTexture(tex ? tex.dataUrl : null, name);
+    });
+    viewer.setPbrMaps(ch.pbr || null);
+  }
+
+  // Recibe varios archivos de imagen a la vez y los reparte entre los materiales
+  // del personaje: primero intenta emparejar por nombre (ej. "piel.jpg" -> material
+  // "piel"), y lo que quede sin coincidencia lo asigna por orden a los materiales
+  // que aún no tengan textura.
+  function autoAssignTextures(ch, fileList){
+    const allMats = (ch.materialNames && ch.materialNames.length) ? ch.materialNames.slice() : ['_default'];
+    const remainingMats = allMats.slice();
+    const files = Array.from(fileList);
+    const unmatched = [];
+
+    function assign(matName, file){
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        ch.textures[matName] = { dataUrl: reader.result, fileName: file.name };
+        renderChars();
+        schedulePersist();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    files.forEach(file=>{
+      const base = file.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[\s_-]+/g, '');
+      const idx = remainingMats.findIndex(m=>{
+        const mNorm = m.toLowerCase().replace(/[\s_-]+/g, '');
+        return base === mNorm || base.includes(mNorm) || mNorm.includes(base);
+      });
+      if(idx >= 0){
+        const matName = remainingMats[idx];
+        remainingMats.splice(idx, 1);
+        assign(matName, file);
+      } else {
+        unmatched.push(file);
+      }
+    });
+
+    let leftoverFiles = 0;
+    if(unmatched.length && remainingMats.length){
+      const n = Math.min(unmatched.length, remainingMats.length);
+      for(let i=0;i<n;i++){ assign(remainingMats[i], unmatched[i]); }
+      leftoverFiles = unmatched.length - n;
+    } else {
+      leftoverFiles = unmatched.length;
+    }
+
+    if(leftoverFiles > 0){
+      alert('Se asignaron las texturas que se pudieron emparejar. ' + leftoverFiles + ' archivo(s) no encontraron material disponible — súbelos manualmente en su fila correspondiente.');
+    }
+  }
+
+  // Carga un .obj por ruta relativa (fetch) — requiere servidor local, ver README.
+  async function loadCharacterObjFromPath(ch){
+    if(!ch.objPath) return;
+    ch.objStatus = 'loading';
+    renderChars();
+    try{
+      const res = await fetch(ch.objPath);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      const geo = buildGeometryFromOBJ(text);
+      if(!geo) throw new Error('sin vértices');
+      ch.geometry = geo;
+      ch.objRaw = null; // se vuelve a leer desde la ruta, no hace falta guardarlo
+      ch.vertexCount = geo.userData.vertexCount;
+      ch.objName = ch.objPath.split('/').pop();
+      ch.materialNames = geo.userData.materialNames || ['_default'];
+      ch.objStatus = 'ok';
+      maybeShowInHero(ch);
+    }catch(err){
+      ch.objStatus = 'error';
+      console.warn('No se pudo cargar', ch.objPath, err,
+        location.protocol === 'file:' ? '— abre la página con "abrir_portafolio.bat" o súbela a internet; con doble clic el navegador bloquea los .obj.' : '');
+    }
+    renderChars();
+  }
+
+  // Muestra en el encabezado el personaje elegido en CONFIG.heroCharacter,
+  // salvo que ya hayas elegido otro con "Usar en encabezado".
+  let heroChosenManually = false;
+  function maybeShowInHero(ch){
+    if(heroChosenManually || !heroViewerRef || !ch.geometry) return;
+    if(characters.indexOf(ch) !== (CONFIG.heroCharacter || 0)) return;
+    heroViewerRef.setMesh(ch.geometry);
+    applyCharacterTextures(heroViewerRef, ch);
+    const hud = document.getElementById('hud-file');
+    if(hud) hud.textContent = ch.objName || ch.name;
+  }
+
+  // Carga los modelos uno por uno (el del encabezado primero) para que la
+  // página no se trabe bajando todos a la vez.
+  async function loadCharactersSequentially(list){
+    const heroIdx = CONFIG.heroCharacter || 0;
+    const ordered = list.slice().sort((x,y)=> (characters.indexOf(x)===heroIdx ? -1 : 0) - (characters.indexOf(y)===heroIdx ? -1 : 0));
+    ordered.forEach(ch=>{ if(ch.objPath && !ch.geometry) ch.objStatus = 'loading'; });
+    for(const ch of ordered){
+      if(ch.objPath && !ch.geometry) await loadCharacterObjFromPath(ch);
+    }
+  }
+
+  const charsGrid = document.getElementById('chars-grid');
+
+  // Siembra los personajes definidos en CONFIG.characters (arriba del archivo)
+  CONFIG.characters.forEach(def=>{
+    const ch = Object.assign(newCharacter(), {
+      name: def.name || 'Personaje',
+      role: def.role || '',
+      software: def.software || '',
+      year: def.year || '',
+      notes: def.notes || '',
+      thumb: def.thumb || null,
+      objPath: def.obj || null
+    });
+    if(def.texture){
+      ch.textures['_default'] = { dataUrl: def.texture, fileName: def.texture.split('/').pop() };
+    }
+    if(def.textures){
+      Object.keys(def.textures).forEach(matName=>{
+        const path = def.textures[matName];
+        ch.textures[matName] = { dataUrl: path, fileName: path.split('/').pop() };
+      });
+    }
+    if(def.normalMap || def.roughnessMap){
+      ch.pbr = { normal: def.normalMap || null, roughness: def.roughnessMap || null };
+    }
+    characters.push(ch);
+  });
+
+  function renderChars(){
+    charsGrid.innerHTML = "";
+    characters.forEach((ch)=>{
+      const card = document.createElement('div'); card.className = 'char-card';
+
+      // thumbnail
+      const thumb = document.createElement('div'); thumb.className = 'char-thumb';
+      if(ch.objStatus === 'loading'){
+        const badge = document.createElement('div'); badge.className='char-badge mono'; badge.textContent = 'Cargando…';
+        thumb.appendChild(badge);
+      } else if(ch.objStatus === 'error'){
+        const badge = document.createElement('div'); badge.className='char-badge mono'; badge.style.color = '#ff8a6b'; badge.textContent = '⚠ ruta no encontrada';
+        thumb.appendChild(badge);
+      } else if(ch.objName){
+        const badge = document.createElement('div'); badge.className='char-badge mono'; badge.textContent = '.OBJ ✓';
+        thumb.appendChild(badge);
+      }
+      const matNamesForBadge = (ch.materialNames && ch.materialNames.length) ? ch.materialNames : [];
+      const texturesAssigned = matNamesForBadge.filter(n=>ch.textures[n] || (matNamesForBadge.length === 1 && ch.textures['_default'])).length;
+      if(texturesAssigned > 0){
+        const texBadge = document.createElement('div'); texBadge.className='char-badge mono';
+        texBadge.style.left='auto'; texBadge.style.right='8px'; texBadge.style.color='var(--accent)';
+        texBadge.textContent = texturesAssigned === matNamesForBadge.length ? 'TEX ✓' : ('TEX ' + texturesAssigned + '/' + matNamesForBadge.length);
+        thumb.appendChild(texBadge);
+      }
+      if(ch.thumb){
+        const img = document.createElement('img'); img.src = ch.thumb; thumb.appendChild(img);
+      } else {
+        const initial = document.createElement('div'); initial.className = 'initial';
+        initial.textContent = (ch.name || "?").trim().charAt(0).toUpperCase() || "?";
+        thumb.appendChild(initial);
+      }
+      const thumbUpload = document.createElement('label'); thumbUpload.className = 'thumb-upload';
+      thumbUpload.innerHTML = 'Cambiar miniatura';
+      const thumbInput = document.createElement('input'); thumbInput.type='file'; thumbInput.accept='image/*';
+      thumbInput.addEventListener('change', (e)=>{
+        const file = e.target.files[0]; if(!file) return;
+        const reader = new FileReader();
+        reader.onload = ()=>{ ch.thumb = reader.result; renderChars(); schedulePersist(); };
+        reader.readAsDataURL(file);
+      });
+      thumbUpload.appendChild(thumbInput);
+      thumb.appendChild(thumbUpload);
+      card.appendChild(thumb);
+
+      // body
+      const bodyEl = document.createElement('div'); bodyEl.className = 'char-body';
+
+      const roleEl = document.createElement('div'); roleEl.className='char-role mono';
+      roleEl.textContent = ch.role; roleEl.setAttribute('contenteditable', body.classList.contains('edit-mode') ? 'true':'false');
+      roleEl.addEventListener('input', ()=>{ ch.role = roleEl.textContent; schedulePersist(); });
+      roleEl.addEventListener('blur', ()=>{ const c=charsGrid.querySelectorAll('.char-thumb .initial'); });
+      bodyEl.appendChild(roleEl);
+
+      const nameEl = document.createElement('div'); nameEl.className='char-name';
+      nameEl.textContent = ch.name; nameEl.setAttribute('contenteditable', body.classList.contains('edit-mode') ? 'true':'false');
+      nameEl.addEventListener('input', ()=>{ ch.name = nameEl.textContent; schedulePersist(); });
+      bodyEl.appendChild(nameEl);
+
+      const specs = document.createElement('div'); specs.className = 'char-specs';
+      function specRow(label, value, onInput){
+        const row = document.createElement('div'); row.className='char-spec-row';
+        const k = document.createElement('span'); k.className='k'; k.textContent = label;
+        const v = document.createElement('span'); v.textContent = value;
+        v.setAttribute('contenteditable', body.classList.contains('edit-mode') ? 'true':'false');
+        v.addEventListener('input', ()=>{ onInput(v.textContent); schedulePersist(); });
+        row.appendChild(k); row.appendChild(v);
+        return row;
+      }
+      specs.appendChild(specRow('SOFTWARE', ch.software, (val)=> ch.software = val));
+      specs.appendChild(specRow('AÑO', ch.year, (val)=> ch.year = val));
+      const polyRow = document.createElement('div'); polyRow.className='char-spec-row';
+      polyRow.innerHTML = '<span class="k">VÉRTICES</span><span>'+ (ch.vertexCount || '—') +'</span>';
+      specs.appendChild(polyRow);
+      bodyEl.appendChild(specs);
+
+      const notesEl = document.createElement('p'); notesEl.className='char-notes';
+      notesEl.textContent = ch.notes; notesEl.setAttribute('contenteditable', body.classList.contains('edit-mode') ? 'true':'false');
+      notesEl.addEventListener('input', ()=>{ ch.notes = notesEl.textContent; schedulePersist(); });
+      bodyEl.appendChild(notesEl);
+
+      const actions = document.createElement('div'); actions.className='char-actions';
+      const objLabel = document.createElement('label'); objLabel.className = 'btn btn-sm';
+      objLabel.textContent = ch.objName ? 'Cambiar .obj' : 'Subir .obj';
+      const objInput = document.createElement('input'); objInput.type='file'; objInput.accept='.obj';
+      objInput.addEventListener('change', (e)=>{
+        const file = e.target.files[0]; if(!file) return;
+        const reader = new FileReader();
+        reader.onload = ()=>{
+          const geo = buildGeometryFromOBJ(reader.result);
+          if(!geo){ alert('No se pudieron leer vértices en ese archivo .obj.'); return; }
+          ch.geometry = geo;
+          ch.objRaw = reader.result;
+          ch.vertexCount = geo.userData.vertexCount;
+          ch.objName = file.name;
+          ch.materialNames = geo.userData.materialNames || ['_default'];
+          ch.textures = {}; // el .obj nuevo puede tener materiales distintos al anterior
+          renderChars();
+          schedulePersist();
+        };
+        reader.readAsText(file);
+      });
+      objLabel.appendChild(objInput);
+      actions.appendChild(objLabel);
+
+      const viewBtn = document.createElement('button'); viewBtn.className='btn btn-sm btn-solid';
+      viewBtn.textContent = 'Ver personaje';
+      viewBtn.addEventListener('click', ()=> openModal(ch.id));
+      actions.appendChild(viewBtn);
+
+      if(ch.geometry){
+        const heroBtn = document.createElement('button'); heroBtn.className='btn btn-sm';
+        heroBtn.textContent = 'Usar en encabezado';
+        heroBtn.addEventListener('click', ()=>{
+          heroChosenManually = true;
+          heroViewerRef.setMesh(ch.geometry);
+          applyCharacterTextures(heroViewerRef, ch);
+          const hud = document.getElementById('hud-file');
+          if(hud) hud.textContent = ch.objName || ch.name;
+        });
+        actions.appendChild(heroBtn);
+      }
+
+      bodyEl.appendChild(actions);
+
+      if(ch.geometry){
+        const matNames = (ch.materialNames && ch.materialNames.length) ? ch.materialNames : ['_default'];
+        const texSection = document.createElement('div'); texSection.className = 'char-tex-section';
+        const texHeading = document.createElement('div'); texHeading.className = 'mono char-tex-heading';
+        texHeading.textContent = matNames.length > 1
+          ? ('TEXTURAS (' + matNames.length + ' materiales detectados)')
+          : 'TEXTURA';
+        texSection.appendChild(texHeading);
+
+        if(matNames.length > 1){
+          const bulkRow = document.createElement('div'); bulkRow.className = 'char-tex-row char-tex-bulk';
+          const bulkHint = document.createElement('span'); bulkHint.className = 'mono char-tex-label';
+          bulkHint.textContent = 'Nombra cada imagen como el material (ej: piel.jpg)';
+          bulkRow.appendChild(bulkHint);
+          const bulkLabel = document.createElement('label'); bulkLabel.className = 'btn btn-sm btn-solid';
+          bulkLabel.textContent = 'Subir todas';
+          const bulkInput = document.createElement('input');
+          bulkInput.type = 'file'; bulkInput.accept = 'image/*'; bulkInput.multiple = true;
+          bulkInput.addEventListener('change', (e)=>{
+            if(e.target.files && e.target.files.length) autoAssignTextures(ch, e.target.files);
+          });
+          bulkLabel.appendChild(bulkInput);
+          bulkRow.appendChild(bulkLabel);
+          texSection.appendChild(bulkRow);
+        }
+
+        matNames.forEach(matName=>{
+          const row = document.createElement('div'); row.className = 'char-tex-row';
+          const label = document.createElement('span'); label.className = 'mono char-tex-label';
+          label.textContent = (matName === '_default' ? 'Color base' : matName) + (ch.textures[matName] ? ' ✓' : '');
+          row.appendChild(label);
+          const upLabel = document.createElement('label'); upLabel.className = 'btn btn-sm';
+          upLabel.textContent = ch.textures[matName] ? 'Cambiar' : 'Subir';
+          const upInput = document.createElement('input'); upInput.type='file'; upInput.accept='image/*';
+          upInput.addEventListener('change', (e)=>{
+            const file = e.target.files[0]; if(!file) return;
+            const reader = new FileReader();
+            reader.onload = ()=>{
+              ch.textures[matName] = { dataUrl: reader.result, fileName: file.name };
+              renderChars();
+              schedulePersist();
+            };
+            reader.readAsDataURL(file);
+          });
+          upLabel.appendChild(upInput);
+          row.appendChild(upLabel);
+          texSection.appendChild(row);
+        });
+
+        bodyEl.appendChild(texSection);
+      }
+
+      card.appendChild(bodyEl);
+
+      const removeRow = document.createElement('div'); removeRow.className='char-remove-row';
+      const removeBtn = document.createElement('button'); removeBtn.className='char-remove'; removeBtn.textContent='Eliminar personaje';
+      removeBtn.addEventListener('click', ()=>{
+        characters = characters.filter(c=>c.id !== ch.id);
+        renderChars();
+        schedulePersist();
+      });
+      removeRow.appendChild(removeBtn); card.appendChild(removeRow);
+
+      charsGrid.appendChild(card);
+    });
+
+    const addCard = document.createElement('div'); addCard.className='add-char-card';
+    addCard.innerHTML = '<span style="font-family:Fredoka; font-size:22px;">+</span><span>Nuevo personaje</span>';
+    addCard.addEventListener('click', ()=>{
+      characters.push(newCharacter());
+      renderChars();
+      schedulePersist();
+      if(!body.classList.contains('edit-mode')) setEditMode(true);
+    });
+    charsGrid.appendChild(addCard);
+  }
+
+  /* ============================================================
+     RED DE PARTÍCULAS (fondo del hero, reacciona al mouse)
+  ============================================================ */
+  function hexToRgb(hex){
+    const m = hex.replace('#','').match(/.{1,2}/g);
+    if(!m) return { r:255, g:143, b:170 };
+    return { r: parseInt(m[0],16), g: parseInt(m[1],16), b: parseInt(m[2],16) };
+  }
+
+  function setupParticleField(canvas){
+    const ctx = canvas.getContext('2d');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let particles = [];
+    let color = hexToRgb(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#F4B942');
+    let mouseX = null, mouseY = null;
+
+    const LINK_DIST = 95;
+    const MOUSE_LINK_DIST = 210;
+
+    function particleCount(){
+      const area = w * h;
+      return Math.max(22, Math.min(60, Math.round(area / 32000)));
+    }
+
+    function makeParticle(){
+      return {
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+        r: 1 + Math.random() * 1.4
+      };
+    }
+
+    function resize(){
+      w = window.innerWidth;
+      h = window.innerHeight;
+      if(w === 0 || h === 0) return;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const target = particleCount();
+      if(particles.length === 0){
+        particles = Array.from({length: target}, makeParticle);
+      } else if(particles.length < target){
+        while(particles.length < target) particles.push(makeParticle());
+      } else if(particles.length > target){
+        particles.length = target;
+      }
+    }
+
+    function setColor(hex){ color = hexToRgb(hex); }
+
+    // el fondo es fijo (cubre todo el viewport), así que el mouse se sigue
+    // en toda la ventana, sin importar qué tan abajo hayas hecho scroll.
+    // Ya no genera puntos nuevos: solo conecta los puntos ambiente que ya
+    // estaban ahí, y se desconectan solos al alejar el mouse.
+    window.addEventListener('pointermove', (e)=>{
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+    document.addEventListener('mouseleave', ()=>{ mouseX = null; mouseY = null; });
+
+    let lastTime = performance.now();
+    function frame(now){
+      requestAnimationFrame(frame);
+      const dt = Math.min(48, now - lastTime);
+      lastTime = now;
+      if(w === 0 || h === 0) return;
+      ctx.clearRect(0, 0, w, h);
+
+      particles.forEach(p=>{
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+        if(p.x < -10) p.x = w + 10; else if(p.x > w + 10) p.x = -10;
+        if(p.y < -10) p.y = h + 10; else if(p.y > h + 10) p.y = -10;
+      });
+
+      const all = particles;
+
+      // líneas entre partículas cercanas
+      for(let i=0;i<all.length;i++){
+        for(let j=i+1;j<all.length;j++){
+          const dx = all[i].x - all[j].x, dy = all[i].y - all[j].y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if(dist < LINK_DIST){
+            const alpha = (1 - dist / LINK_DIST) * 0.18;
+            ctx.strokeStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + alpha.toFixed(3) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(all[i].x, all[i].y);
+            ctx.lineTo(all[j].x, all[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // líneas hacia el mouse
+      if(mouseX !== null){
+        all.forEach(p=>{
+          const dx = p.x - mouseX, dy = p.y - mouseY;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if(dist < MOUSE_LINK_DIST){
+            const alpha = (1 - dist / MOUSE_LINK_DIST) * 0.55;
+            ctx.strokeStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + alpha.toFixed(3) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(mouseX, mouseY);
+            ctx.stroke();
+          }
+        });
+      }
+
+      // puntos
+      ctx.fillStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.75)';
+      particles.forEach(p=>{
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      if(mouseX !== null){
+        ctx.fillStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.9)';
+        ctx.beginPath();
+        ctx.arc(mouseX, mouseY, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    resize();
+    requestAnimationFrame(frame);
+    return { resize, setColor };
+  }
+
+  /* ============================================================
+     VISOR PRINCIPAL (HERO)
+  ============================================================ */
+  const heroViewer = createViewer(document.getElementById('viewport-canvas'));
+  heroViewerRef = heroViewer;
+  heroViewer.setMesh(new THREE.IcosahedronGeometry(1.35, 1));
+  heroViewer.setTransparent(true); // deja ver el fondo de partículas / imagen detrás del modelo
+  const particleField = setupParticleField(document.getElementById('particle-canvas'));
+  window.addEventListener('resize', ()=>{ heroViewer.resize(); particleField.resize(); if(modalOpen) modalViewer.resize(); });
+  heroViewer.resize();
+
+  document.getElementById('hero-obj-input').addEventListener('change', (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const geo = buildGeometryFromOBJ(reader.result);
+      if(!geo){ alert('No se pudieron leer vértices en ese archivo .obj.'); return; }
+      heroViewer.setMesh(geo);
+      document.getElementById('hud-file') && (document.getElementById('hud-file').textContent = file.name);
+    };
+    reader.readAsText(file);
+  });
+
+  /* ============================================================
+     MODAL DE PERSONAJE
+  ============================================================ */
+  const modalEl = document.getElementById('char-modal');
+  const modalViewer = createViewer(document.getElementById('modal-canvas'));
+  let modalOpen = false;
+  let modalIndex = -1;
+
+  function openModal(charId){
+    modalIndex = characters.findIndex(c=>c.id === charId);
+    if(modalIndex === -1) return;
+    modalEl.hidden = false;
+    modalOpen = true;
+    requestAnimationFrame(()=>{ modalViewer.resize(); refreshModal(); });
+  }
+  function closeModal(){ modalEl.hidden = true; modalOpen = false; }
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  modalEl.addEventListener('click', (e)=>{ if(e.target === modalEl) closeModal(); });
+  document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && modalOpen) closeModal(); });
+
+  function refreshModal(){
+    const ch = characters[modalIndex];
+    if(!ch) return;
+    document.getElementById('modal-role').textContent = ch.role;
+    document.getElementById('modal-name').textContent = ch.name;
+    document.getElementById('modal-species').textContent = ch.role;
+    document.getElementById('modal-software').textContent = ch.software;
+    document.getElementById('modal-year').textContent = ch.year;
+    document.getElementById('modal-verts-2').textContent = ch.vertexCount || '—';
+    document.getElementById('modal-notes').textContent = ch.notes;
+    document.getElementById('modal-hud-file').textContent = ch.objName || 'SIN_ARCHIVO.obj';
+    document.getElementById('modal-hud-verts').textContent = 'VÉRTICES: ' + (ch.vertexCount || '—');
+    document.getElementById('modal-empty-note').style.display = ch.geometry ? 'none' : 'block';
+
+    if(ch.geometry){
+      modalViewer.setMesh(ch.geometry);
+      applyCharacterTextures(modalViewer, ch);
+    } else {
+      modalViewer.setMesh(new THREE.IcosahedronGeometry(1.15, 0));
+    }
+
+    document.getElementById('modal-prev').disabled = characters.length <= 1;
+    document.getElementById('modal-next').disabled = characters.length <= 1;
+  }
+  document.getElementById('modal-prev').addEventListener('click', ()=>{
+    modalIndex = (modalIndex - 1 + characters.length) % characters.length;
+    refreshModal();
+  });
+  document.getElementById('modal-next').addEventListener('click', ()=>{
+    modalIndex = (modalIndex + 1) % characters.length;
+    refreshModal();
+  });
+
+  /* ============================================================
+     LOOP DE ANIMACIÓN GLOBAL
+  ============================================================ */
+  function animate(){
+    requestAnimationFrame(animate);
+    heroViewer.tick();
+    if(modalOpen) modalViewer.tick();
+  }
+  animate();
+
+  /* ============================================================
+     EXPORTAR HTML
+  ============================================================ */
+  // Genera un index.html limpio con tu diseño actual guardado adentro.
+  // Al subir ese archivo, los visitantes ven tus textos, colores y sprites.
+  document.getElementById('export-btn').addEventListener('click', ()=>{
+    const doc = new DOMParser().parseFromString(ORIGINAL_HTML, 'text/html');
+    const old = doc.getElementById('portfolio-baked-state');
+    if(old) old.remove();
+    const baked = doc.createElement('script');
+    baked.type = 'application/json';
+    baked.id = 'portfolio-baked-state';
+    baked.textContent = buildPersistPayload(true).replace(/<\//g, '<\\/');
+    doc.head.appendChild(baked);
+    const html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    const blob = new Blob([html], { type:'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'index.html';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1000);
+    alert('Se descargó "index.html" con tu diseño.\n\nReemplaza con él el index.html de tu carpeta del portafolio y vuelve a subir la carpeta.');
+  });
+
+  /* ============================================================
+     INIT
+  ============================================================ */
+  document.getElementById('footer-year').textContent = "© " + new Date().getFullYear();
+  renderSkills();
+  renderReel();
+  renderChars();
+  loadPersisted().then(()=>{
+    applyAccent(state.accent);
+    accentPicker.value = state.accent;
+    applyBg(state.bg);
+    bgPicker.value = state.bg;
+    if(state.bgImage) applyBgImage(state.bgImage);
+    cardBgPicker.value = state.cardBg;
+    applyCardBg(state.cardBg);
+    if(state.cardBgImage) applyCardBgImage(state.cardBgImage);
+    renderSkills();
+    rebuildCustomTexts();
+    editableFieldIds.forEach(applyTextboxStyle);
+    state.customTexts.forEach(ct=> applyTextboxStyle(ct.id));
+
+    if(state.sprites.length === 0){
+      // primera visita: siembra algunos sprites de ejemplo repartidos
+      for(let i=0;i<10;i++) addSprite();
+    } else {
+      spriteCounter = Math.max(...state.sprites.map(s=>s.id)) + 1;
+      renderSprites();
+    }
+
+    if(Array.isArray(state.reelItems) && state.reelItems.length){
+      reelItems = state.reelItems;
+      renderReel();
+    }
+
+    if(Array.isArray(state.characters) && state.characters.length){
+      characters.length = 0; // vacía lo que haya sembrado CONFIG.characters
+      let maxId = 0;
+      state.characters.forEach(saved=>{
+        const ch = Object.assign(newCharacter(), saved);
+        if(ch.objRaw){
+          const geo = buildGeometryFromOBJ(ch.objRaw);
+          if(geo){
+            ch.geometry = geo;
+            ch.vertexCount = geo.userData.vertexCount;
+            ch.materialNames = geo.userData.materialNames || ch.materialNames || ['_default'];
+            ch.objStatus = 'ok';
+          }
+        }
+        characters.push(ch);
+        maxId = Math.max(maxId, ch.id || 0);
+      });
+      charIdCounter = maxId + 1;
+      renderChars();
+    }
+    // Los personajes que vienen por ruta (CONFIG) se cargan ahora, uno por uno.
+    loadCharactersSequentially(characters);
+    characters.forEach(maybeShowInHero);
+  });
+  // Modo visitante: en internet la página se ve limpia, sin herramientas.
+  // Tú editas abriéndola en tu computador, o en internet agregando ?editar
+  // al final del link (ej: https://tu-sitio.netlify.app/?editar).
+  if(!IS_VISITOR){
+    setEditMode(true);
+  } else {
+    body.classList.add('visitor');
+    setEditMode(false);
+  }
+})();
+</script>
+</body>
+</html>
